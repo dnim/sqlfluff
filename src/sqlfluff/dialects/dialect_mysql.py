@@ -239,10 +239,8 @@ class ColumnDefinitionSegment(BaseSegment):
         Ref("SingleIdentifierGrammar"),  # Column name
         OneOf(  # Column type
             # DATETIME and TIMESTAMP take special logic
-            AnyNumberOf(
-                Ref("DatatypeSegment"),
-                max_times=1,
-                min_times=1,
+            Ref(
+                "DatatypeSegment",
                 exclude=OneOf("DATETIME", "TIMESTAMP"),
             ),
             Sequence(
@@ -678,7 +676,6 @@ class StatementSegment(ansi.StatementSegment):
             Ref("ResignalSegment"),
             Ref("CursorOpenCloseSegment"),
             Ref("CursorFetchSegment"),
-            Ref("DropFunctionStatementSegment"),
             Ref("DropProcedureStatementSegment"),
             Ref("AlterTableStatementSegment"),
             Ref("RenameTableStatementSegment"),
@@ -1584,7 +1581,7 @@ class DropFunctionStatementSegment(BaseSegment):
     https://dev.mysql.com/doc/refman/8.0/en/drop-function-loadable.html
     """
 
-    type = "drop_function_ statement"
+    type = "drop_function_statement"
 
     # DROP FUNCTION [IF EXISTS] function_name
     match_grammar = Sequence(
@@ -1823,7 +1820,7 @@ class UpdateStatementSegment(BaseSegment):
         "UPDATE",
         Ref.keyword("LOW_PRIORITY", optional=True),
         Ref.keyword("IGNORE", optional=True),
-        Delimited(Ref("TableReferenceSegment"), Ref("FromExpressionElementSegment")),
+        Delimited(Ref("TableReferenceSegment"), Ref("FromExpressionSegment")),
         Ref("SetClauseListSegment"),
         Ref("WhereClauseSegment", optional=True),
         Ref("OrderByClauseSegment", optional=True),

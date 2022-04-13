@@ -947,7 +947,7 @@ ansi_dialect.add(
         # Trim function
         Sequence(
             Ref("TrimParametersGrammar"),
-            OneOf(Ref("ExpressionSegment"), optional=True, exclude=Ref.keyword("FROM")),
+            Ref("ExpressionSegment", optional=True, exclude=Ref.keyword("FROM")),
             "FROM",
             Ref("ExpressionSegment"),
         ),
@@ -1081,10 +1081,8 @@ class FunctionSegment(BaseSegment):
         ),
         Sequence(
             Sequence(
-                AnyNumberOf(
-                    Ref("FunctionNameSegment"),
-                    max_times=1,
-                    min_times=1,
+                Ref(
+                    "FunctionNameSegment",
                     exclude=OneOf(
                         Ref("DatePartFunctionNameSegment"),
                         Ref("ValuesClauseSegment"),
@@ -1158,8 +1156,8 @@ class FromExpressionElementSegment(BaseSegment):
     match_grammar: Matchable = Sequence(
         Ref("PreTableFunctionKeywordsGrammar", optional=True),
         OptionallyBracketed(Ref("TableExpressionSegment")),
-        OneOf(
-            Ref("AliasExpressionSegment"),
+        Ref(
+            "AliasExpressionSegment",
             exclude=OneOf(
                 Ref("SamplingExpressionSegment"),
                 Ref("JoinLikeClauseGrammar"),
@@ -2679,25 +2677,6 @@ class DropDatabaseStatementSegment(BaseSegment):
     )
 
 
-class CreateExtensionStatementSegment(BaseSegment):
-    """A `CREATE EXTENSION` statement.
-
-    https://www.postgresql.org/docs/9.1/sql-createextension.html
-    """
-
-    type = "create_extension_statement"
-    match_grammar: Matchable = Sequence(
-        "CREATE",
-        "EXTENSION",
-        Ref("IfNotExistsGrammar", optional=True),
-        Ref("ExtensionReferenceSegment"),
-        Ref.keyword("WITH", optional=True),
-        Sequence("SCHEMA", Ref("SchemaReferenceSegment"), optional=True),
-        Sequence("VERSION", Ref("VersionIdentifierSegment"), optional=True),
-        Sequence("FROM", Ref("VersionIdentifierSegment"), optional=True),
-    )
-
-
 class CreateIndexStatementSegment(BaseSegment):
     """A `CREATE INDEX` statement."""
 
@@ -3098,7 +3077,7 @@ class UpdateStatementSegment(BaseSegment):
         Ref("TableReferenceSegment"),
         # SET is not a resevered word in all dialects (e.g. RedShift)
         # So specifically exclude as an allowed implict alias to avoid parsing errors
-        OneOf(Ref("AliasExpressionSegment"), exclude=Ref.keyword("SET"), optional=True),
+        Ref("AliasExpressionSegment", exclude=Ref.keyword("SET"), optional=True),
         Ref("SetClauseListSegment"),
         Ref("FromClauseSegment", optional=True),
         Ref("WhereClauseSegment", optional=True),
@@ -3177,8 +3156,7 @@ class FunctionDefinitionGrammar(BaseSegment):
         Ref("QuotedLiteralSegment"),
         Sequence(
             "LANGUAGE",
-            # Not really a parameter, but best fit for now.
-            Ref("ParameterNameSegment"),
+            Ref("NakedIdentifierSegment"),
             optional=True,
         ),
     )
@@ -3233,6 +3211,19 @@ class FunctionParameterListGrammar(BaseSegment):
             delimiter=Ref("CommaSegment"),
             optional=True,
         ),
+    )
+
+
+class DropFunctionStatementSegment(BaseSegment):
+    """A `DROP FUNCTION` statement."""
+
+    type = "drop_function_statement"
+
+    match_grammar = Sequence(
+        "DROP",
+        "FUNCTION",
+        Ref("IfExistsGrammar", optional=True),
+        Ref("FunctionNameSegment"),
     )
 
 
@@ -3296,6 +3287,21 @@ class CreateTypeStatementSegment(BaseSegment):
     )
 
 
+class CreateUserStatementSegment(BaseSegment):
+    """A `CREATE USER` statement.
+
+    A very simple create user syntax which can be extended
+    by other dialects.
+    """
+
+    type = "create_user_statement"
+    match_grammar: Matchable = Sequence(
+        "CREATE",
+        "USER",
+        Ref("ObjectReferenceSegment"),
+    )
+
+
 class CreateRoleStatementSegment(BaseSegment):
     """A `CREATE ROLE` statement.
 
@@ -3349,12 +3355,10 @@ class MLTableExpressionSegment(BaseSegment):
         Ref("SingleIdentifierGrammar"),
         Bracketed(
             Sequence("MODEL", Ref("ObjectReferenceSegment")),
-            OneOf(
-                Sequence(
-                    Ref("CommaSegment"),
-                    Bracketed(
-                        Ref("SelectableGrammar"),
-                    ),
+            Sequence(
+                Ref("CommaSegment"),
+                Bracketed(
+                    Ref("SelectableGrammar"),
                 ),
                 optional=True,
             ),
@@ -3375,6 +3379,7 @@ class StatementSegment(BaseSegment):
         Ref("TransactionStatementSegment"),
         Ref("DropTableStatementSegment"),
         Ref("DropViewStatementSegment"),
+        Ref("CreateUserStatementSegment"),
         Ref("DropUserStatementSegment"),
         Ref("TruncateStatementSegment"),
         Ref("AccessStatementSegment"),
@@ -3389,13 +3394,13 @@ class StatementSegment(BaseSegment):
         Ref("DropTypeStatementSegment"),
         Ref("CreateDatabaseStatementSegment"),
         Ref("DropDatabaseStatementSegment"),
-        Ref("CreateExtensionStatementSegment"),
         Ref("CreateIndexStatementSegment"),
         Ref("DropIndexStatementSegment"),
         Ref("CreateViewStatementSegment"),
         Ref("DeleteStatementSegment"),
         Ref("UpdateStatementSegment"),
         Ref("CreateFunctionStatementSegment"),
+        Ref("DropFunctionStatementSegment"),
         Ref("CreateModelStatementSegment"),
         Ref("DropModelStatementSegment"),
         Ref("DescribeStatementSegment"),

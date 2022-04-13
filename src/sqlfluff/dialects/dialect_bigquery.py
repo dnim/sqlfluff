@@ -253,6 +253,13 @@ bigquery_dialect.sets("datetime_units").update(
         "QUARTER",
         "YEAR",
         "ISOYEAR",
+        "MONDAY",
+        "TUESDAY",
+        "WEDNESDAY",
+        "THURSDAY",
+        "FRIDAY",
+        "SATURDAY",
+        "SUNDAY",
     ]
 )
 
@@ -269,6 +276,7 @@ bigquery_dialect.sets("date_part_function_name").update(
         "TIME_TRUNC",
         "TIMESTAMP_DIFF",
         "TIMESTAMP_TRUNC",
+        "WEEK",
     ]
 )
 
@@ -444,77 +452,82 @@ class FunctionSegment(ansi.FunctionSegment):
     for our purposes.
     """
 
-    match_grammar = OneOf(
-        Sequence(
-            # BigQuery EXTRACT allows optional TimeZone
-            Ref("ExtractFunctionNameSegment"),
-            Bracketed(
-                Ref("DatetimeUnitSegment"),
-                "FROM",
-                Ref("ExpressionSegment"),
-                Ref("TimeZoneGrammar", optional=True),
-            ),
-        ),
-        Sequence(
-            # Treat functions which take date parts separately
-            # So those functions parse date parts as DatetimeUnitSegment
-            # rather than identifiers.
-            OneOf(
-                Ref("DatePartFunctionNameSegment"),
-                exclude=Ref("ExtractFunctionNameSegment"),
-            ),
-            Bracketed(
-                Delimited(
+    match_grammar = Sequence(
+        # BigQuery Function names can be prefixed by the keyword SAFE to
+        # return NULL instead of error.
+        # https://cloud.google.com/bigquery/docs/reference/standard-sql/functions-reference#safe_prefix
+        Sequence("SAFE", Ref("DotSegment"), optional=True),
+        OneOf(
+            Sequence(
+                # BigQuery EXTRACT allows optional TimeZone
+                Ref("ExtractFunctionNameSegment"),
+                Bracketed(
                     Ref("DatetimeUnitSegment"),
-                    Ref(
-                        "FunctionContentsGrammar",
-                        ephemeral_name="FunctionContentsGrammar",
-                    ),
+                    "FROM",
+                    Ref("ExpressionSegment"),
+                    Ref("TimeZoneGrammar", optional=True),
                 ),
             ),
-        ),
-        Sequence(
             Sequence(
-                AnyNumberOf(
-                    Ref("FunctionNameSegment"),
-                    max_times=1,
-                    min_times=1,
-                    exclude=OneOf(
-                        Ref("DatePartFunctionNameSegment"),
-                        Ref("ValuesClauseSegment"),
-                    ),
+                # Treat functions which take date parts separately
+                # So those functions parse date parts as DatetimeUnitSegment
+                # rather than identifiers.
+                Ref(
+                    "DatePartFunctionNameSegment",
+                    exclude=Ref("ExtractFunctionNameSegment"),
                 ),
                 Bracketed(
-                    Ref(
-                        "FunctionContentsGrammar",
-                        # The brackets might be empty for some functions...
-                        optional=True,
-                        ephemeral_name="FunctionContentsGrammar",
-                    )
-                ),
-            ),
-            # Functions returning ARRAYS in BigQuery can have optional
-            # Array Accessor clauses
-            Ref("ArrayAccessorSegment", optional=True),
-            # Functions returning STRUCTs in BigQuery can have the fields
-            # elements referenced (e.g. ".a"), including wildcards (e.g. ".*")
-            # or multiple nested fields (e.g. ".a.b", or ".a.b.c")
-            Sequence(
-                Ref("DotSegment"),
-                AnyNumberOf(
-                    Sequence(
-                        Ref("ParameterNameSegment"),
-                        Ref("DotSegment"),
+                    Delimited(
+                        Ref("DatetimeUnitSegment"),
+                        Ref(
+                            "FunctionContentsGrammar",
+                            ephemeral_name="FunctionContentsGrammar",
+                        ),
                     ),
                 ),
-                OneOf(
-                    Ref("ParameterNameSegment"),
-                    Ref("StarSegment"),
-                ),
-                optional=True,
             ),
-            Ref("PostFunctionGrammar", optional=True),
+            Sequence(
+                Sequence(
+                    Ref(
+                        "FunctionNameSegment",
+                        exclude=OneOf(
+                            Ref("DatePartFunctionNameSegment"),
+                            Ref("ValuesClauseSegment"),
+                        ),
+                    ),
+                    Bracketed(
+                        Ref(
+                            "FunctionContentsGrammar",
+                            # The brackets might be empty for some functions...
+                            optional=True,
+                            ephemeral_name="FunctionContentsGrammar",
+                        )
+                    ),
+                ),
+                # Functions returning ARRAYS in BigQuery can have optional
+                # Array Accessor clauses
+                Ref("ArrayAccessorSegment", optional=True),
+                # Functions returning STRUCTs in BigQuery can have the fields
+                # elements referenced (e.g. ".a"), including wildcards (e.g. ".*")
+                # or multiple nested fields (e.g. ".a.b", or ".a.b.c")
+                Sequence(
+                    Ref("DotSegment"),
+                    AnyNumberOf(
+                        Sequence(
+                            Ref("ParameterNameSegment"),
+                            Ref("DotSegment"),
+                        ),
+                    ),
+                    OneOf(
+                        Ref("ParameterNameSegment"),
+                        Ref("StarSegment"),
+                    ),
+                    optional=True,
+                ),
+                Ref("PostFunctionGrammar", optional=True),
+            ),
         ),
+        allow_gaps=False,
     )
 
 
@@ -529,8 +542,7 @@ class FunctionDefinitionGrammar(ansi.FunctionDefinitionGrammar):
             ),
             Sequence(
                 "LANGUAGE",
-                # Not really a parameter, but best fit for now.
-                Ref("ParameterNameSegment"),
+                Ref("NakedIdentifierSegment"),
                 Sequence(
                     "OPTIONS",
                     Bracketed(
@@ -628,6 +640,7 @@ class DatatypeSegment(ansi.DatatypeSegment):
                     Sequence(
                         Ref("ParameterNameSegment"),
                         Ref("DatatypeSegment"),
+                        Ref("OptionsSegment", optional=True),
                     ),
                     delimiter=Ref("CommaSegment"),
                     bracket_pairs_set="angle_bracket_pairs",
@@ -1048,6 +1061,7 @@ class CreateTableStatementSegment(ansi.CreateTableStatementSegment):
                         Ref("TableConstraintSegment"),
                         Ref("ColumnDefinitionSegment"),
                     ),
+                    allow_trailing=True,
                 )
             ),
             Ref("CommentClauseSegment", optional=True),
